@@ -1,0 +1,24 @@
+# 1. Sampah Sistem Python (Wajib di-ignore)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 2. Folder Environment & Config VS Code
+env/
+venv/
+.env
+.vscode/
+
+# 3. Streamlit Cache
+.streamlit/
+
+# 4. Data Besar (Opsional, tapi disarankan agar GitHub tidak penuh)
+# Kita ignore semua file di folder data, TAPI kita kecualikan file rekap kecil
+data/*
+!data/rekap_performa.csv
+
+# 5. Model Besar (Opsional)
+# GitHub punya limit 100MB per file. Jika modelmu kecil (<100MB), aman di-upload.
+# Jika nanti error "File too large", uncomment baris di bawah ini:
+# models/*.pkl
