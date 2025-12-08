@@ -4,12 +4,13 @@ import joblib
 import os 
 import altair as alt # Library grafik bawaan Streamlit
 import re # Untuk preprocessing sederhana
+from deep_translator import GoogleTranslator
 
 # ==========================================
 # ⚙️ 1. KONFIGURASI HALAMAN & PATH
 # ==========================================
 st.set_page_config(
-    page_title="Final Project ADS - Email Spam Analysis", 
+    page_title="Final Project Datmin - Email Spam Analysis", 
     layout="wide", 
     page_icon="📊"
 )
@@ -69,43 +70,48 @@ def simple_preprocessing(text):
     text = re.sub(r'[^a-z0-9\s]', '', text) 
     return text
 
-# ==========================================
 # 🗂️ 3. SIDEBAR NAVIGASI
-# ==========================================
-st.sidebar.title("🗂️ Navigasi Proyek")
-menu = st.sidebar.radio("Pilih Tahapan:", 
+st.sidebar.title("🗂️ Spam Detector App")
+menu = st.sidebar.radio("Menu Utama:",
     ["1. Introduction", "2. Visualisasi Data", "3. Evaluasi Data", "4. Model Benchmarking"]
 )
-
 st.sidebar.markdown("---")
-st.sidebar.caption("Final Project\nMata Kuliah Analisis Data Statistik\nGasal 2025/2026\n oleh Kelompok 13")
-
-# ==========================================
+st.sidebar.caption(
+    """
+    Made with 💙 from Group 13 Datmin K Gasal 2025/2026
+    
+    **Anggota Kelompok:**
+    1. Ahmad Al-Rifai (5003221108)
+    2. M. Irfan Kurniawan (5003231194)
+    3. Aditya Wahib Erlangga (5003231206)
+    """
+)
 # 📖 4. KONTEN HALAMAN
-# ==========================================
-
-# ------------------------------------------
 # HALAMAN 1: INTRODUCTION
-# ------------------------------------------
 if menu == "1. Introduction":
-    st.title("📑 Final Project: Analisis Klasifikasi Spam")
-    st.subheader("Mata Kuliah Analisis Data Statistik")
+    st.title("📑 Final Project: E-mail Spam Classification Analysis")
+    st.subheader("Mata Kuliah Data Mining dan Visualisasi")
     
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown("### Latar Belakang")
         st.write("""
         Email merupakan salah satu sarana komunikasi utama, namun rentan terhadap penyalahgunaan berupa *spam*. 
-        Dalam Final Project ini, dilakukan studi komparatif untuk mencari model terbaik dalam mengklasifikasikan email spam dan ham (bukan spam).
+        Spam tidak hanya mengganggu, tetapi juga dapat membawa risiko keamanan seperti *phishing* dan penyebaran malware.
+        Sebagai upaya mitigasi, klasifikasi email menjadi spam atau ham (aman) sangat penting dilakukan.
+                 
+        Dalam Project kali ini, akan dicari 8 kombinasi model dalam mengklasifikasikan email spam dan ham (bukan spam).
+        Selain itu, akan ada juga fitur prediksi langsung berdasarkan input teks email dari pengguna.
         """)
         
         st.markdown("### Tentang Dataset")
         st.info("""
         **Sumber Data:** [Kaggle - Email Spam Classification Dataset](https://www.kaggle.com/datasets/balaka18/email-spam-classification-dataset-csv)
         
-        Dataset ini berisi **5.171** baris data email dengan dua kolom utama:
-        * **text**: Isi pesan email.
-        * **label**: Kategori pesan (1 untuk Spam, 0 untuk Ham/Aman).
+        Dataset ini berisi **5.172** baris data email dengan 3002 kolom, dimana:
+        * **Email No.**: Nomor urut email pada kolom pertama.
+        * **Prediction**: Kolom Terakhir, Kategori pesan Email (1 untuk Spam, 0 untuk Ham/Aman).
+        * Sisa 3000 kolom lainnya berisi 3000 kata paling populer pada email.
         
         Dataset ini dipilih karena memiliki variasi teks yang cukup untuk menguji ketahanan model NLP.
         """)
@@ -161,9 +167,7 @@ elif menu == "2. Visualisasi Data":
                 st.image(os.path.join(BASE_PATH, 'assets', 'wordcloudham.png'), use_container_width=True)
             except: st.write("Gambar tidak tersedia.")
 
-# ------------------------------------------
 # HALAMAN 3: EVALUASI DATA
-# ------------------------------------------
 elif menu == "3. Evaluasi Data":
     st.title("📈 Evaluasi Performa Model Keseluruhan")
     st.write("Halaman ini menyajikan ringkasan performa dari seluruh kombinasi eksperimen.\n")
@@ -174,6 +178,7 @@ elif menu == "3. Evaluasi Data":
         st.subheader("🏆 Leaderboard Model")
         st.caption("Secara default tabel diurutkan berdasarkan **F1-Score**. Anda dapat mengklik header kolom lain untuk mengurutkan ulang.")
         
+        # Urutkan berdasarkan nama kolom ASLI di CSV
         leaderboard = df.sort_values(by='F1_Score', ascending=False)
         
         if 'Report' in leaderboard.columns:
@@ -186,11 +191,14 @@ elif menu == "3. Evaluasi Data":
             use_container_width=True,
             hide_index=True,
             column_config={
-                # --- PERBAIKAN DI SINI: Menggunakan Test_Acc ---
+                # KUNCI (Kiri) harus nama kolom ASLI di CSV
+                # LABEL (Kanan) adalah nama cantik yang ingin ditampilkan
                 "Test_Acc": st.column_config.ProgressColumn("Akurasi (Test)", format="%.3f", min_value=0, max_value=1),
                 "Train_Acc": st.column_config.ProgressColumn("Akurasi (Train)", format="%.3f", min_value=0, max_value=1),
                 "F1_Score": st.column_config.ProgressColumn("F1-Score", format="%.3f", min_value=0, max_value=1),
-                "ROC_AUC": st.column_config.NumberColumn("ROC-AUC", format="%.3f")
+                "ROC_AUC": st.column_config.NumberColumn("ROC-AUC", format="%.3f"),
+                "Precision": st.column_config.NumberColumn("Precision", format="%.3f"),
+                "Recall": st.column_config.NumberColumn("Recall", format="%.3f")
             }
         )
 
@@ -198,16 +206,32 @@ elif menu == "3. Evaluasi Data":
 
         # --- 2. GRAFIK ALTAIR ---
         st.subheader("📊 Perbandingan Metrik Antar Skenario")
-        # Pastikan pilihan metrik sesuai nama kolom di CSV
-        metric_choice = st.selectbox("Pilih Metrik untuk Grafik:", ["F1_Score", "Test_Acc", "Train_Acc", "ROC_AUC", "Precision", "Recall"])
         
+        # Mapping: Nama Cantik (Pilihan User) -> Nama Kolom Asli (Dataframe)
+        metric_map = {
+            "F1-Score": "F1_Score",
+            "Testing Accuracy": "Test_Acc",
+            "Training Accuracy": "Train_Acc",
+            "ROC-AUC": "ROC_AUC",
+            "Precision": "Precision",
+            "Recall": "Recall"
+        }
+        
+        # Selectbox menampilkan Nama Cantik
+        metric_label = st.selectbox("Pilih Metrik untuk Grafik:", list(metric_map.keys()))
+        
+        # Ambil Nama Kolom Asli untuk plotting
+        metric_col = metric_map[metric_label]
+        
+        # Buat kolom Label gabungan untuk sumbu Y
         df['Label'] = df['Model'] + " + " + df['NLP'] + " (" + df['Split'] + ")"
         
         chart = alt.Chart(df).mark_bar().encode(
-            x=alt.X(metric_choice, title=f"Nilai {metric_choice}"),
+            # x menggunakan kolom asli (metric_col), tapi title menggunakan nama cantik (metric_label)
+            x=alt.X(metric_col, title=f"Nilai {metric_label}"),
             y=alt.Y('Label', sort='-x', title="Skenario Eksperimen"),
             color=alt.Color('Model', legend=alt.Legend(title="Algoritma")),
-            tooltip=['Label', 'Model', alt.Tooltip(metric_choice, format=".3f")]
+            tooltip=['Label', 'Model', alt.Tooltip(metric_col, title=metric_label, format=".3f")]
         ).properties(
             height=500
         ).interactive()
@@ -215,14 +239,22 @@ elif menu == "3. Evaluasi Data":
         st.altair_chart(chart, use_container_width=True)
 
     else:
-        st.warning("Data CSV kosong atau tidak ditemukan.")
+        st.warning("Data CSV kosong atau tidak ditemukan.")# Tambahkan import ini di bagian paling atas app.py
+
+# ... (Kode konfigurasi dan load data biarkan saja) ...
 
 # ------------------------------------------
-# HALAMAN 4: MODEL BENCHMARKING
+# HALAMAN 4: MODEL BENCHMARKING (DENGAN TRANSLATOR)
 # ------------------------------------------
 elif menu == "4. Model Benchmarking":
     st.title("⚙️ Detail Model & Prediksi")
-    st.markdown("Analisis mendalam per skenario, visualisasi evaluasi, dan uji coba prediksi.")
+    st.markdown(
+        """
+        Analisis mendalam per skenario, visualisasi evaluasi, dan uji coba prediksi.
+        
+        Silakan pilih kombinasi model yang tersedia di bawah ini:
+        """
+    )
 
     # A. SELEKSI MODEL
     col1, col2, col3 = st.columns(3)
@@ -246,35 +278,34 @@ elif menu == "4. Model Benchmarking":
         (df['Model'] == model_opt)
     ]
 
-    # --- TABS FOR BETTER LAYOUT ---
+    # --- TABS LAYOUT ---
     tab_metrik, tab_grafik, tab_prediksi = st.tabs(["📊 Metrik & Laporan", "📈 Grafik Evaluasi", "🤖 Live Prediction"])
 
-    # TAB 1: METRIK & REPORT
+    # === TAB 1: METRIK & REPORT ===
     with tab_metrik:
         if not subset.empty:
             row = subset.iloc[0]
             st.subheader("Summary Metrics")
+            
             c1, c2, c3, c4 = st.columns(4)
-            
-            # --- PERBAIKAN DI SINI: Menggunakan Test_Acc dan Train_Acc ---
             c1.metric("Training Accuracy", f"{row['Train_Acc']*100:.2f}%")
-            c2.metric("Testing Accuracy", f"{row['Test_Acc']*100:.2f}%")
-            c3.metric("F1-Score", f"{row['F1_Score']:.3f}")
-            c4.metric("ROC-AUC", f"{row['ROC_AUC']:.3f}")
+            c2.metric("Testing Accuracy",  f"{row['Test_Acc']*100:.2f}%")
+            c3.metric("F1-Score",          f"{row['F1_Score']:.3f}")
+            c4.metric("ROC-AUC",           f"{row['ROC_AUC']:.3f}")
             
-            # Overfitting Check
             diff = row['Train_Acc'] - row['Test_Acc']
             if diff > 0.05:
-                st.warning(f"⚠️ Potensi Overfitting: Training lebih tinggi {diff*100:.1f}% dari Testing.")
+                st.warning(f"⚠️ Potensi Overfitting: Akurasi Training lebih tinggi {diff*100:.1f}% daripada Testing.")
             else:
                 st.success("✅ Model Stabil (Good Fit)")
             
+            st.divider()
             st.subheader("Classification Report")
             st.code(row['Report'], language='text')
         else:
             st.warning("Data kombinasi ini tidak ditemukan di CSV.")
 
-    # TAB 2: GRAFIK (CM & ROC)
+    # === TAB 2: GRAFIK (CM & ROC) ===
     with tab_grafik:
         col_g1, col_g2 = st.columns(2)
         with col_g1:
@@ -288,29 +319,51 @@ elif menu == "4. Model Benchmarking":
                 st.image(os.path.join(BASE_PATH, 'assets', img_roc_name), use_container_width=True)
             except: st.write(f"Gambar {img_roc_name} tidak ditemukan.")
 
-    # TAB 3: LIVE PREDICTION
+    # === TAB 3: LIVE PREDICTION (MULTI-LANGUAGE) ===
     with tab_prediksi:
         if model:
-            st.info(f"Menggunakan Model: `{filename}`")
+            st.info(f"Menggunakan Model Aktif: `{filename}`")
+            # REVISI KATA-KATA: Menjadi Multi-Bahasa
+            st.markdown("""
+            💡 **Fitur Cerdas:** Model ini mendukung **Multi-Bahasa** (Indonesia, Inggris, Spanyol, Daerah, dll).
+            Sistem akan otomatis menerjemahkan input Anda ke Bahasa Inggris sebelum melakukan prediksi.
+            """)
             
             text_input = st.text_area("Masukkan Subject/Body Email:", height=100, 
-                                     placeholder="Contoh: URGENT! You have won a $1000 Walmart Gift Card. Click here to claim.")
+                                     placeholder="Contoh: SELAMAT! Anda memenangkan hadiah undian Rp 1 Milyar. Klik di sini sekarang!")
             
             if st.button("Analisis Email"):
                 if text_input:
-                    # 1. Preprocessing Sederhana
-                    clean_input = simple_preprocessing(text_input)
+                    # PROSES 1: TRANSLASI (AUTO -> EN)
+                    with st.spinner("Menerjemahkan & Menganalisis..."):
+                        try:
+                            # Auto-detect language and translate to English
+                            translated_text = GoogleTranslator(source='auto', target='en').translate(text_input)
+                            
+                            # Tampilkan hasil terjemahan agar user tahu (Transparansi)
+                            st.caption(f"📝 **Terjemahan Sistem:** *{translated_text}*")
+                            
+                        except Exception as e:
+                            st.error("Gagal menerjemahkan (Cek koneksi internet). Menggunakan teks asli.")
+                            translated_text = text_input
+
+                    # PROSES 2: PREPROCESSING
+                    clean_input = simple_preprocessing(translated_text)
                     
                     try:
-                        # 2. Prediksi
+                        # PROSES 3: PREDIKSI
                         prediksi = model.predict([clean_input])[0]
                         
-                        # 3. Tampilkan Hasil
+                        # 4. TAMPILKAN HASIL DENGAN EFEK
                         if prediksi == 1 or prediksi == 'spam': 
+                            st.snow() # Efek Salju
                             st.error("🚨 KESIMPULAN: SPAM DETECTED!")
+                            st.toast("⚠️ Hati-hati! Email ini terindikasi berbahaya.", icon="🚨")
                         else:
-                            st.balloons()
+                            st.balloons() # Efek Balon
                             st.success("✅ KESIMPULAN: HAM (AMAN)")
+                            st.toast("✅ Email aman untuk dibuka.", icon="🛡️")
+                            
                     except Exception as e:
                         st.error(f"Error prediksi: {e}")
                         st.info("Tips: Pastikan model .pkl berisi Pipeline lengkap.")
